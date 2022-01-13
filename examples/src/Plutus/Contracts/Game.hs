@@ -51,7 +51,17 @@ import qualified Ledger.Constraints    as Constraints
 import           Ledger.Tx             (ChainIndexTxOut (..))
 import qualified Ledger.Typed.Scripts  as Scripts
 import           Playground.Contract
-import           Plutus.Contract
+import Plutus.Contract
+    ( (>>),
+      logInfo,
+      logWarn,
+      fundsAtAddressGeq,
+      submitTxConstraints,
+      submitTxConstraintsSpending,
+      collectFromScript,
+      selectList,
+      Promise,
+      ContractError )
 import           Plutus.Contract.Trace as X
 import qualified PlutusTx
 import           PlutusTx.Prelude      hiding (pure, (<$>))

@@ -41,10 +41,15 @@ common lang
 library
     import: lang
     exposed-modules:
-      MyModule
-      Plutus.Contracts.Game
+      -- MyModule
+      -- Plutus.Contracts.Game
+      -- Plutus.Contracts.Auction
+      Plutus.Contracts.AllwaysTrue
+      -- Plutus.Contracts.DropSpotTrade
+      -- Plutus.Contracts.DropSpotTradeSM
+      Plutus.Contracts.DropspotMarket
     build-depends:
-      base >= 4.9 && < 5,
+      base ^>=4.14.1.0,
       aeson,
       bytestring,
       containers,
@@ -54,6 +59,11 @@ library
       plutus-tx-plugin,
       plutus-tx,
       plutus-ledger,
+      plutus-ledger-api,
+      plutus-use-cases,
+      text,
+      serialise,
+      cardano-api
     hs-source-dirs: src examples/src
 
 test-suite plutus-example-projects-test
@@ -94,3 +104,46 @@ executable plutus-starter-pab
     plutus-ledger -any,
     openapi3 -any,
 
+
+executable DropspotMarketCompile
+  import:               lang
+  hs-source-dirs:       app
+  main-is:              DropspotMarketCompile.hs
+  ghc-options:          -threaded -rtsopts "-with-rtsopts=-T"
+
+  build-depends:        cardano-api
+                      , cardano-ledger-alonzo
+                      , plutus-ledger
+                      , plutus-starter -any
+                      , plutus-ledger-api
+                      , bytestring
+                      , base >= 4.9 && < 5
+
+executable AlwaysTrueCompile
+  import:               lang
+  hs-source-dirs:       app
+  main-is:              AlwaysTrueCompile.hs
+  ghc-options:          -threaded -rtsopts "-with-rtsopts=-T"
+
+  build-depends:        cardano-api
+                      , cardano-ledger-alonzo
+                      , plutus-ledger
+                      , plutus-starter -any
+                      , plutus-ledger-api
+                      , bytestring
+                      , base >= 4.9 && < 5
+
+-- executable DropSpotTradeCompile
+--   import:               lang
+--   hs-source-dirs:       app
+--   main-is:              DropSpotTradeCompile.hs
+--   ghc-options:          -threaded -rtsopts "-with-rtsopts=-T"
+
+--   build-depends:        cardano-api
+--                       , cardano-ledger-alonzo
+--                       , plutus-ledger
+--                       , plutus-tx
+--                       , plutus-starter -any
+--                       , plutus-ledger-api
+--                       , bytestring
+--                       , base >= 4.9 && < 5

@@ -200,3 +200,11 @@ For more interactive discussion, you can join the [IOG Technical Community
 Discord](https://discord.gg/sSF5gmDBYg).
 
 Thanks!
+
+
+
+# Compile to Plutus
+
+```
+cabal run DropSpotTradeCompile -- 42 dsTrade.plutus
+```

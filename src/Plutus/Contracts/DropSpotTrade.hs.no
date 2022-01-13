@@ -1,0 +1,162 @@
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveAnyClass             #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE NoImplicitPrelude          #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE BangPatterns               #-}
+
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# LANGUAGE NumericUnderscores #-}
+
+module Plutus.Contracts.DropSpotTrade (dsTradeSBS, dsTradeSerialised, ContractInfo) where
+
+import           Control.Monad        hiding (fmap)
+import           Data.Aeson           (ToJSON, FromJSON)
+import           GHC.Generics         (Generic)
+import           Data.Map             as Map
+import           Data.Text            (Text)
+import           Data.Void            (Void)
+import           Plutus.Contract
+import           PlutusTx             (Data (..))
+import qualified PlutusTx
+import           PlutusTx.Prelude
+import           Ledger               hiding (pubKeyHash, singleton)
+import           Ledger.Constraints   as Constraints
+import qualified Ledger.Typed.Scripts as Scripts
+import           Ledger.Ada           as Ada
+import Playground.Contract
+    ( printJson,
+      printSchemas,
+      ensureKnownCurrencies,
+      stage,
+      printJson,
+      printSchemas,
+      ensureKnownCurrencies,
+      stage,
+      ToSchema )
+import           Playground.TH        (mkKnownCurrencies, mkSchemaDefinitions)
+import           Playground.Types     (KnownCurrency (..))
+import           Text.Printf          (printf)
+
+import           Plutus.Contracts.Currency
+
+import           Codec.Serialise
+import           Cardano.Api.Shelley  (PlutusScript (..), PlutusScriptV1)
+import qualified Data.ByteString.Short as SBS
+import qualified Data.ByteString.Lazy  as LBS
+
+import           Ledger.Value
+import           Plutus.Contract.StateMachine.ThreadToken (ThreadToken)
+
+import           Prelude                      (Semigroup (..), Show (..), uncurry)
+import qualified Prelude
+
+data ContractInfo = ContractInfo {
+  -- Address where Commission is to be paid to
+  dsAddress    :: !PubKeyHash,
+  -- Commission %age
+  dsCommission :: !Integer,
+  -- Minimum price to trade with this NFT
+  minPrice     :: !Integer
+} deriving (Generic, ToJSON, FromJSON, ToSchema)
+
+contactInfo = ContractInfo {
+  dsAddress = "",
+  dsCommission = 10,
+  minPrice = 70_000_000
+}
+
+data OfferDetails = OfferDetails {
+  token             :: !AssetClass,
+  threadToken       :: !(Maybe ThreadToken),
+  price             :: !Integer
+} deriving (Show, Generic, FromJSON, ToJSON, Prelude.Eq)
+
+data BuyAction = BuyAction {
+  amount :: !Integer
+}
+
+data TradingDatum = Offer OfferDetails -- | Bid  deriving (Generic, ToJSON, FromJSON)
+
+data TradeAction = Buy BuyAction | Cancel deriving (Generic, ToJSON, FromJSON)
+
+mkValidator :: ContractInfo -> TradingDatum -> TradeAction -> ScriptContext -> Bool
+mkValidator ContractInfo{..} tradeDatum tradeAction ctx = case tradeDatum of
+
+  Offer OfferDetails{..} -> case tradeAction of
+
+    Buy details@BuyAction{..} -> traceIfFalse "Not signed by Trade Owner" (sellNFTToBuyer (valuePaidTo info signer) token) &&
+                                 traceIfFalse "Price is not enough"       (amount > minPrice) &&
+                                 traceIfFalse "Need to pay Drop."         correctSplit
+
+    Cancel -> traceIfFalse "Not signed by Trade Owner" $ info `txSignedBy` tradeOwner
+
+
+  where
+    info :: TxInfo
+    info = scriptContextTxInfo ctx
+
+    -- policyAssets :: Value -> CurrencySymbol -> [(CurrencySymbol, TokenName, Integer)]
+    -- policyAssets v cs = PlutusTx.Prelude.filter (\(cs',_,am) -> cs == cs' && am == 1) (flattenValue v)
+
+    signer :: PubKeyHash
+    signer = case txInfoSignatories info of
+        [pubKeyHash] -> pubKeyHash
+
+    sellNFTToBuyer :: Value -> AssetClass -> Bool
+    sellNFTToBuyer v nft = valueOf  nft >= 1
+
+    correctSplit :: Bool
+    correctSplit = True
+
+data Trade
+instance Scripts.ValidatorTypes Trade where
+    type instance RedeemerType Trade = TradeAction
+    type instance DatumType Trade = TradingDatum
+
+PlutusTx.makeIsDataIndexed ''ContractInfo [('ContractInfo, 0)]
+PlutusTx.makeLift ''ContractInfo
+
+PlutusTx.makeIsDataIndexed ''OfferDetails [('OfferDetails, 0)]
+PlutusTx.makeLift ''OfferDetails
+
+PlutusTx.makeIsDataIndexed ''TradingDatum [('Offer, 0), ('Bid, 1)]
+PlutusTx.makeLift ''TradingDatum
+
+PlutusTx.makeIsDataIndexed ''TradeAction [('Buy, 0), ('Cancel, 1)]
+PlutusTx.makeLift ''TradeAction
+
+
+dsTradeValidatorInstance :: ContractInfo -> Scripts.TypedValidator Trade
+dsTradeValidatorInstance contractInfo = Scripts.mkTypedValidator @Trade
+    ($$(PlutusTx.compile [|| mkValidator ||]) `PlutusTx.applyCode` PlutusTx.liftCode contractInfo)
+    $$(PlutusTx.compile [|| wrap ||])
+  where
+    wrap = Scripts.wrapValidator @TradingDatum @TradeAction
+
+validator :: ContractInfo -> Validator
+validator = Scripts.validatorScript . dsTradeValidatorInstance
+
+valHash :: ContractInfo -> Ledger.ValidatorHash
+valHash = Scripts.validatorHash . dsTradeValidatorInstance
+
+scrAddress :: ContractInfo -> Ledger.Address
+scrAddress = scriptAddress . validator
+
+
+dsTradeSBS :: ContractInfo -> SBS.ShortByteString
+dsTradeSBS ci =  SBS.toShort . LBS.toStrict $ serialise (validator ci)
+
+dsTradeSerialised :: ContractInfo -> PlutusScript PlutusScriptV1
+dsTradeSerialised ci = PlutusScriptSerialised (dsTradeSBS ci)
