@@ -1,6 +1,7 @@
 {
     "name": "Plutus Starter Project",
-    "image": "docker.io/inputoutput/plutus-starter-devcontainer:v1.0.14",
+    // "image": "docker.io/inputoutput/plutus-starter-devcontainer:v1.0.14",
+    "image": "docker.io/inputoutput/plutus-starter-devcontainer:latest",
     "hostRequirements": {
         "memory": "16gb"
     },

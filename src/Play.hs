@@ -1,38 +1,17 @@
-{-# LANGUAGE AllowAmbiguousTypes        #-}
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveAnyClass             #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE NoImplicitPrelude          #-}
-{-# LANGUAGE PartialTypeSignatures      #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeApplications           #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ViewPatterns               #-}
-{-# LANGUAGE OverloadedStrings   #-}
-
-
 module Play (main) where
 
-import GHC.Generics
-import PlutusTx;
-import Data.Aeson.Types (ToJSON, FromJSON)
-import Data.Aeson (toJSON)
-import Prelude (Integer, String, Show (show))
+import qualified PlutusTx.Prelude
 
+main :: Integer
+main = lovelacePercentage 100000000 400
 
-data MarketRedeemer = Buy | Cancel
+minLovelace :: Integer
+minLovelace = 2000000
 
-PlutusTx.makeIsDataIndexed ''MarketRedeemer [ ('Buy, 0), ('Cancel, 1)]
--- PlutusTx.unstableMakeIsData ''MarketRedeemer
-PlutusTx.makeLift ''MarketRedeemer
-
-main :: Data
-main = PlutusTx.toData (Buy)
+lovelacePercentage :: Integer -> Integer -> Integer
+lovelacePercentage am p =
+  if p > 0
+    then if result < minLovelace then minLovelace else result
+    else 0 -- Prevent Divide By Zero
+  where
+    result = (am * 10) `PlutusTx.Prelude.divide` p
