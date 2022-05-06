@@ -41,13 +41,9 @@ common lang
 library
     import: lang
     exposed-modules:
-      -- MyModule
-      -- Plutus.Contracts.Game
-      -- Plutus.Contracts.Auction
       Plutus.Contracts.AllwaysTrue
-      -- Plutus.Contracts.DropSpotTrade
-      -- Plutus.Contracts.DropSpotTradeSM
       Plutus.Contracts.DropspotMarket
+      Plutus.Contracts.DropspotDMTDistro
     build-depends:
       base ^>=4.14.1.0,
       aeson,
@@ -62,8 +58,11 @@ library
       plutus-ledger,
       plutus-ledger-api,
       plutus-use-cases,
-      text,
+      data-default,
+      text, 
       serialise,
+      cardano-binary,
+      base16-bytestring,
       cardano-api
     hs-source-dirs: src examples/src
 
@@ -105,7 +104,6 @@ test-suite plutus-example-projects-test
 --     plutus-ledger -any,
 --     openapi3 -any,
 
-
 executable DropspotMarketCompile
   import:               lang
   hs-source-dirs:       app
@@ -118,6 +116,28 @@ executable DropspotMarketCompile
                       , plutus-starter -any
                       , plutus-ledger-api
                       , bytestring
+                      , base16-bytestring
+                      , plutus-tx
+                      , cardano-ledger-alonzo
+                      , base >= 4.9 && < 5
+
+executable DMTDistroCompile
+  import:               lang
+  hs-source-dirs:       app
+  main-is:              DMTDistroCompile.hs
+  ghc-options:          -threaded -rtsopts "-with-rtsopts=-T"
+
+  build-depends:        cardano-api
+                      , cardano-ledger-alonzo
+                      , plutus-ledger
+                      , plutus-starter -any
+                      , plutus-ledger-api
+                      , cardano-ledger-alonzo
+                      , plutus-tx
+                      , bytestring
+                      , aeson
+                      , cardano-binary
+                      , bech32
                       , base >= 4.9 && < 5
 
 executable AlwaysTrueCompile

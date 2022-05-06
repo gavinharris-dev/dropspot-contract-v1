@@ -208,3 +208,51 @@ Thanks!
 ```
 cabal run DropSpotTradeCompile -- 42 dsTrade.plutus
 ```
+
+
+
+'''
+import Wallet.Emulator.Wallet
+import Ledger.Address
+
+toPubKeyHash $ mockWalletAddress $ knownWallet 2
+'''
+
+Wallet 1 PubKeyHash: a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2
+Wallet 2 PubKeyHash: 80a4f45b56b88d1139da23bc4c3c75ec6d32943c087f250b86193ca7
+
+
+
+```
+cabal run DMTDistroCompile \
+  "\"9e09ad3c6d542b0c53b36793de1c26dfa15f1c4005fd000726792c36\"" \
+  "\"777be88df242bd81b95d8947d099086abf1896a4d693be4a80388ee9\"" \
+  "\"tDMT\"" \
+  dmtdistro.20220427.plutus \
+  --builddir dist-main
+```
+
+```
+cabal run DMTDistroCompile \
+  "\"68ddc8867360a897f3840652c1352db1a6c7e1ca82e685e47032b36d\"" \
+  "\"777be88df242bd81b95d8947d099086abf1896a4d693be4a80388ee9\"" \
+  "\"tDMT\"" \
+  dmtdistro.20220427.plutus \
+  --builddir dist-main
+```
+
+9e09ad3c6d542b0c53b36793de1c26dfa15f1c4005fd000726792c36
+
+68ddc8867360a897f3840652c1352db1a6c7e1ca82e685e47032b36d
+
+6068ddc8867360a897f3840652c1352db1a6c7e1ca82e685e47032b36d
+
+
+
+```
+import qualified Data.ByteString.Base16 as B16
+import qualified Data.ByteString.Lazy  as LBS
+import Cardano.Binary
+
+show $ B16.encode $ LBS.toStrict ( serializeEncoding $ toCBOR distroDatumToData)
+```

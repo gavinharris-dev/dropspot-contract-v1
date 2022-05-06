@@ -1,16 +1,6 @@
 {-
-  Dropspot Marketplace Plutus Smart Contract - v0.2
+  Dropspot Marketplace Plutus Smart Contract - v0.4
 
-  Input Datum:
-    marketPlaceOwner :: !PubKeyHash, -- Wallet address for Dropspot
-
-    marketPlacePCT :: !Integer,
-      Percentage to be paid to the market place owner (calculate this by taking ((1 / percentage) * 10)) - 0.4% would be ((1/(0.4/100)) * 10) = 2500.
-
-    tradeOwner :: !PubKeyHash,       -- Owners Wallet Public Key hash
-    amount :: !Integer,              -- Minimum Trade Amount for Token
-    policy :: !BuiltinByteString,    -- Policy of NFT that we are selling
-    token :: !BuiltinByteString      -- NFT that we are selling
 
 -}
 {-# LANGUAGE AllowAmbiguousTypes #-}
@@ -32,8 +22,9 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NumericUnderscores #-}
 
-module Plutus.Contracts.DropspotMarket (dropspotMarketSBS, dropspotMarketlised, marketDatumToData, marketActionToData, valHash, scrAddress) where
+module Plutus.Contracts.DropspotMarket where
 
 import Cardano.Api.Shelley (PlutusScript (..), PlutusScriptV1)
 import Codec.Serialise
@@ -53,11 +44,13 @@ import Playground.TH (mkKnownCurrencies, mkSchemaDefinitions)
 import Playground.Types (KnownCurrency (..))
 import Plutus.Contract
 import qualified Plutus.Contract.Constraints as Constraints
-import Plutus.Contract.Request
 import Plutus.Contract.Request (awaitTxConfirmed)
 import Plutus.Contract.Types (AsContractError)
+import qualified Plutus.V1.Ledger.Ada as Ada
+import Plutus.V1.Ledger.Interval (from)
 import qualified PlutusTx
 import PlutusTx.Prelude hiding (Semigroup (..), unless)
+import qualified PlutusTx.Foldable as Foldable
 import Text.Printf (printf)
 import qualified Prelude as Haskell
 
@@ -73,10 +66,16 @@ contractInfo =
       marketPlacePCT = 400 -- 2.5%
     }
 
+data DisbursementItem = DisbursementItem {
+  wallet    :: !PaymentPubKeyHash, -- Wallet address for Dropspot
+  percent   :: !Integer -- Percentage to be paid to the market place owner
+}
+  deriving (Generic, ToJSON, FromJSON, Haskell.Show, Haskell.Eq, ToSchema)
+
 data MarketDatum = MarketDatum
-  { royaltyOwner :: !PaymentPubKeyHash, -- Wallet address for Dropspot
-    royaltyPCT :: !Integer, -- Percentage to be paid to the market place owner
-    tradeOwner :: !PaymentPubKeyHash, -- Owners Wallet Public Key hash
+  { royalties :: ![DisbursementItem],
+    disburements :: ![DisbursementItem],
+    tradeOwner :: !PaymentPubKeyHash,
     amount :: !Integer, -- Minimum Trade Amount for Token
     policy :: !CurrencySymbol, -- Policy of NFT that we are selling
     token :: !TokenName, -- NFT that we are selling
@@ -84,23 +83,30 @@ data MarketDatum = MarketDatum
   }
   deriving (Generic, ToJSON, FromJSON, Haskell.Show)
 
-data MarketAction = Buy | Cancel
+data MarketAction = Buy | Cancel | Relist
   deriving (Generic, ToJSON, FromJSON)
 
 PlutusTx.makeIsDataIndexed ''ContractInfo [('ContractInfo, 0)]
 PlutusTx.makeLift ''ContractInfo
 
+PlutusTx.makeIsDataIndexed ''DisbursementItem [('DisbursementItem, 0)]
+PlutusTx.makeLift ''DisbursementItem
+
 PlutusTx.makeIsDataIndexed ''MarketDatum [('MarketDatum, 0)]
 PlutusTx.makeLift ''MarketDatum
 
-PlutusTx.makeIsDataIndexed ''MarketAction [('Buy, 0), ('Cancel, 1)]
+PlutusTx.makeIsDataIndexed ''MarketAction [('Buy, 0), ('Cancel, 1), ('Relist, 2)]
 PlutusTx.makeLift ''MarketAction
 
 -- On Chain Validator
 
 {-# INLINEABLE minLovelace #-}
 minLovelace :: Integer
-minLovelace = 2000000
+minLovelace = 2_000_000 -- FIXME: We should be calculating this I think and not requiring 2 ADA on each NFT!
+
+{-# INLINEABLE mintingFee #-}
+mintingFee :: Integer
+mintingFee = 5_000_000
 
 {-# INLINEABLE lovelacePercentage #-}
 lovelacePercentage :: Integer -> Integer -> Integer
@@ -118,13 +124,25 @@ mkValidator ci mkDatum mkAction context = case mkAction of
   --   1. The Trade Owner is being paid at least the 'minimum' amount
   --   2. The Token is being xferd to the buyer
   Buy ->
-    purchaseStartDatePassed
-      && correctlySplit (marketPlaceOwner ci) (marketPlacePCT ci) (unPaymentPubKeyHash $ royaltyOwner mkDatum) (royaltyPCT mkDatum) (unPaymentPubKeyHash $ tradeOwner mkDatum) (txInfoFee txInfo) (amount mkDatum)
+    traceIfFalse "Sale is not open yet" (purchaseStartDatePassed $ startDate mkDatum)
+      && correctlySplit (royalties mkDatum) (marketPlaceOwner ci) (marketPlacePCT ci) (disburements mkDatum) (unPaymentPubKeyHash $ tradeOwner mkDatum) (amount mkDatum)
       && buyerGetsPaid (valuePaidTo txInfo signer) (policy mkDatum) (token mkDatum)
   -- Cancel action need to verify that:
   --   1. The Trade Owner should geti their NFT Back
   --   2. If / When we go to a Bid process the current Highest Big should be repaid.
-  Cancel -> containsNFT (valuePaidTo txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)) (policy mkDatum) (token mkDatum)
+  --   3. Transaction Signed by Marketplace Owner or Royalty Owner
+  --   4. If signed by Royalty Owner then DS needs to be paid a nominal fee (5 ADA?)? - Future Listings?
+
+  Relist -> 
+    False
+    -- Must be signed by Trade Owner
+    -- NFT must be sent to script (include all datum etc)
+
+  --  NFT(Datum 1) -> NFT(Datum 2)
+  Cancel ->
+    traceIfFalse "The trade owner should get their NFT" $ containsNFT (valuePaidTo txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)) (policy mkDatum) (token mkDatum) &&
+    traceIfFalse "The Marketplace Owner should get their Cancelation Fee" dropspotGetPaid
+
   where
     txInfo :: TxInfo
     txInfo = scriptContextTxInfo context
@@ -143,16 +161,34 @@ mkValidator ci mkDatum mkAction context = case mkAction of
     containsNFT :: Value -> CurrencySymbol -> TokenName -> Bool
     containsNFT v policy asset = valueOf v policy asset >= 1
 
-    correctlySplit :: PubKeyHash -> Integer -> PubKeyHash -> Integer -> PubKeyHash -> Integer -> Integer -> Bool
-    correctlySplit dsWallet dsPct royaltyWallet royatyPct tradeWallet fees total =
-      let dsAmount = lovelacePercentage total dsPct
-          royaltyAmount = lovelacePercentage total royatyPct
-       in traceIfFalse "Dropspot Marketplace should get its share" (Ada.fromValue (valuePaidTo txInfo dsWallet) >= Ada.lovelaceOf dsAmount)
-            && traceIfFalse "The Roylaty Owner should get its share" (Ada.fromValue (valuePaidTo txInfo royaltyWallet) >= Ada.lovelaceOf royaltyAmount)
-            && traceIfFalse "The seller should get the remaining Ada" (Ada.fromValue (valuePaidTo txInfo tradeWallet) >= Ada.lovelaceOf (total - dsAmount - royaltyAmount - fees))
+    dropspotGetPaid :: Bool
+    dropspotGetPaid = Ada.fromValue (valuePaidTo txInfo (marketPlaceOwner ci)) >= Ada.lovelaceOf mintingFee
 
-    purchaseStartDatePassed :: Bool
-    purchaseStartDatePassed = traceIfFalse "Asset is not yet for sale" True --FIXME: Why does this not work? (contains (from (startDate mkDatum)) (txInfoValidRange txInfo))
+    correctlySplit :: [DisbursementItem] -> PubKeyHash -> Integer -> [DisbursementItem] -> PubKeyHash -> Integer -> Bool
+    correctlySplit royalties dsWallet dsPct dis to total =
+      let dsAmount = lovelacePercentage total dsPct
+          royaltyAmount = PlutusTx.Prelude.sum $ PlutusTx.Prelude.map (lovelacePercentage total . percent) royalties
+          remainingAmount = total - dsAmount - royaltyAmount - minLovelace
+
+          tradeOwnerPayout = remainingAmount - otherDisbursements remainingAmount dis
+
+       in traceIfFalse "Dropspot Marketplace should get its share" (Ada.fromValue (valuePaidTo txInfo dsWallet) >= Ada.lovelaceOf dsAmount)
+            && traceIfFalse "The Royalties should be paid out" (royaltiesPaidOut total royalties)
+            && traceIfFalse "The remaining ADA should be correctly Disbursed" (currectlyDisbursed remainingAmount dis)
+            && traceIfFalse "The tradeOwner should get all that is left" (Ada.fromValue (valuePaidTo txInfo to) >= Ada.lovelaceOf tradeOwnerPayout)
+
+    otherDisbursements :: Integer -> [DisbursementItem] -> Integer
+    otherDisbursements t d = Foldable.sum $ PlutusTx.Prelude.map (\d1 -> lovelacePercentage t $ percent d1) d
+
+    currectlyDisbursed :: Integer -> [DisbursementItem] -> Bool
+    currectlyDisbursed amt ds =  Foldable.all (\d -> Ada.fromValue (valuePaidTo txInfo $ unPaymentPubKeyHash (wallet d)) >= (Ada.lovelaceOf $ lovelacePercentage amt $ percent d) ) ds
+
+    royaltiesPaidOut :: Integer -> [DisbursementItem] -> Bool
+    royaltiesPaidOut total ra =
+      Foldable.all (\r -> Ada.fromValue (valuePaidTo txInfo $ unPaymentPubKeyHash (wallet r)) >= (Ada.lovelaceOf $ lovelacePercentage total $ percent r)) ra
+
+    purchaseStartDatePassed :: POSIXTime -> Bool
+    purchaseStartDatePassed startDate = contains (from startDate) (txInfoValidRange txInfo)
 
 -- Compile Section
 
@@ -185,17 +221,32 @@ dropspotMarketSBS = SBS.toShort . LBS.toStrict $ serialise validator
 dropspotMarketlised :: PlutusScript PlutusScriptV1
 dropspotMarketlised = PlutusScriptSerialised dropspotMarketSBS
 
+
 marketDatumToData :: PlutusTx.Data
 marketDatumToData =
   PlutusTx.toData
     ( MarketDatum
-        { royaltyOwner = PaymentPubKeyHash "89400023E22ECEA2CA12283BC4C65B78723905BE3306D1716E0391FD",
-          royaltyPCT = 5000,
-          tradeOwner = PaymentPubKeyHash "89400023E22ECEA2CA12283BC4C65B78723905BE3306D1716E0391FD", -- Owners Wallet Public Key hash
+        {
+          royalties = [
+            DisbursementItem {
+              wallet = PaymentPubKeyHash "89400023E22ECEA2CA12283BC4C65B78723905BE3306D1716E0391FD",
+              percent = 5000
+            },
+            DisbursementItem {
+              wallet = PaymentPubKeyHash "98400023E22ECEA2CA12283BC4C65B78723905BE3306D1716E0391FD",
+              percent = 3000
+            }
+          ],
+          disburements = [
+            DisbursementItem {
+              wallet = PaymentPubKeyHash "89400023E22ECEA2CA12283BC4C65B78723905BE3306D1716E0391FD",
+              percent = 0}
+          ],
+          tradeOwner = PaymentPubKeyHash "89400023E22ECEA2CA12283BC4C65B78723905BE3306D1716E0391FD",
           amount = 100000000,
           policy = CurrencySymbol "103F42252C7EFC783E99035F39714F749A11C5E7408EB459630DABA9",
           token = TokenName "416E6F746865724F6E65546F6B656E36",
-          startDate = 1000
+          startDate = 1596059092000
         }
     )
 
@@ -216,7 +267,10 @@ data ListParams = ListParams
   { listPolicy :: !CurrencySymbol,
     listAssetName :: !TokenName,
     listAmount :: !Integer,
-    listStartDate :: !POSIXTime
+    listStartDate :: !POSIXTime,
+    listTradeOwner :: !PaymentPubKeyHash,
+    listDisbursements :: ![DisbursementItem],
+    listRoyalties :: ![DisbursementItem]
   }
   deriving stock (Haskell.Eq, Haskell.Show, Generic)
   deriving anyclass (FromJSON, ToJSON, ToSchema)
@@ -234,19 +288,20 @@ list ListParams {..} = do
   pkh <- ownPaymentPubKeyHash
   let d =
         MarketDatum
-          { tradeOwner = pkh,
+          {
+            disburements = listDisbursements,
             amount = listAmount,
+            tradeOwner = listTradeOwner,
             startDate = listStartDate,
             policy = listPolicy,
             token = listAssetName,
-            royaltyOwner = PaymentPubKeyHash "89400023E22ECEA2CA12283BC4C65B78723905BE3306D1716E0391FD",
-            royaltyPCT = 80000
+            royalties = listRoyalties
           }
       v = Value.singleton listPolicy listAssetName 1 Haskell.<> Ada.lovelaceValueOf minLovelace
       tx = Constraints.mustPayToTheScript d v
   ledgerTx <- submitTxConstraints typedValidator tx
   void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
-  logInfo @Haskell.String $ printf "Listed %s for token %s" (Haskell.show d) (Haskell.show v)
+  logInfo @Haskell.String $ printf "Listed %s for token %s. Transaction %s" (Haskell.show d) (Haskell.show v) (Haskell.show ledgerTx)
 
 buy :: forall w s. BuyParams -> Contract w s Text ()
 buy BuyParams {..} = do
@@ -260,26 +315,38 @@ buy BuyParams {..} = do
   let v = Value.singleton buyPolicy buyAssetName 1 Haskell.<> Ada.lovelaceValueOf (minLovelace + buyAmount)
       t = Value.singleton buyPolicy buyAssetName 1
       r = Redeemer $ PlutusTx.toBuiltinData Buy
-
       lookups =
         Constraints.typedValidatorLookups typedValidator
+          Haskell.<> Constraints.ownPaymentPubKeyHash pkh
           Haskell.<> Constraints.otherScript validator
           Haskell.<> Constraints.unspentOutputs (Map.singleton oref o)
 
       marketPlaceAmount = lovelacePercentage buyAmount (marketPlacePCT contractInfo)
-      royaltyAmount = lovelacePercentage buyAmount royaltyPCT
+      totalRoyaltyAmount = Haskell.sum $ Haskell.map (lovelacePercentage buyAmount . percent) royalties
 
+      disbursementAmount = buyAmount - totalRoyaltyAmount - marketPlaceAmount - minLovelace
+
+      otherDisbursements = Haskell.sum $ Haskell.map (\d -> lovelacePercentage disbursementAmount (percent d)) disburements
+
+      remainingAmount = disbursementAmount - otherDisbursements
       tx =
         Constraints.mustPayToPubKey (PaymentPubKeyHash $ marketPlaceOwner contractInfo) (Ada.lovelaceValueOf marketPlaceAmount)
-          Haskell.<> Constraints.mustPayToPubKey royaltyOwner (Ada.lovelaceValueOf royaltyAmount)
-          Haskell.<> Constraints.mustPayToPubKey tradeOwner (Ada.lovelaceValueOf (buyAmount - royaltyAmount - marketPlaceAmount - minLovelace))
+          Haskell.<>  Haskell.foldl (Haskell.<>) mempty (
+            Haskell.map (
+              \r -> Constraints.mustPayToPubKey (wallet r) (Ada.lovelaceValueOf (lovelacePercentage disbursementAmount (percent r)))) disburements
+          )
+          Haskell.<> Constraints.mustPayToPubKey tradeOwner (Ada.lovelaceValueOf remainingAmount)
+          Haskell.<> Constraints.mustSpendAtLeast (Ada.lovelaceValueOf buyAmount)
           Haskell.<> Constraints.mustPayToPubKey pkh (t Haskell.<> Ada.lovelaceValueOf minLovelace)
+          Haskell.<> Constraints.mustValidateIn (from startDate)
           Haskell.<> Constraints.mustSpendScriptOutput oref r
+          Haskell.<> Haskell.foldl (Haskell.<>) mempty (Haskell.map (
+            \r -> Constraints.mustPayToPubKey (wallet r) (Ada.lovelaceValueOf (lovelacePercentage buyAmount (percent r)))) royalties)
 
-  logInfo @Haskell.String $ printf "Attempt to Buy Token (DS Amount: %d RoyaltyAmount: %d)" marketPlaceAmount royaltyAmount
+  logInfo @Haskell.String $ printf "Attempt to Buy Token for %d (DS Amount: %d RoyaltyAmount: %d, disbursementAmount %d (remainingAmount: %d))" buyAmount marketPlaceAmount totalRoyaltyAmount disbursementAmount remainingAmount
   ledgerTx <- submitTxConstraintsWith lookups tx
   void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
-  logInfo @Haskell.String $ printf "Purchased Token (DS Amount: %d RoyaltyAmount: %d)" marketPlaceAmount royaltyAmount
+  logInfo @Haskell.String $ printf "Purchased Token (DS Amount: %d RoyaltyAmount: %d)" marketPlaceAmount totalRoyaltyAmount
 
 findOffer :: CurrencySymbol -> TokenName -> Contract w s Text (TxOutRef, ChainIndexTxOut, MarketDatum)
 findOffer cs tn = do

@@ -8,3 +8,5 @@ cradle:
       component: "plutus-starter:test:plutus-example-projects-test"
     - path: "./pab"
       component: "plutus-starter:exe:plutus-starter-pab"
+    - path: "./app"
+      component: "plutus-starter:lib:plutus-starter"

@@ -25,3 +25,6 @@ result*
 .envrc
 .vim
 build.log
+*.plutus
+ghcup
+.DS_Store

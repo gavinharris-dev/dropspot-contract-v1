@@ -1,17 +1,19 @@
 module Play (main) where
 
+import Data.Default (def)
+import GHC.Base (when)
+import Ledger.Interval
+import Ledger.TimeSlot
+import Plutus.Contract (logInfo)
 import qualified PlutusTx.Prelude
 
-main :: Integer
-main = lovelacePercentage 100000000 400
+main :: IO ()
+main = do
+  let currentSlot = slotToPOSIXTimeRange def 10
+      start = slotToBeginPOSIXTime def 4
 
-minLovelace :: Integer
-minLovelace = 2000000
-
-lovelacePercentage :: Integer -> Integer -> Integer
-lovelacePercentage am p =
-  if p > 0
-    then if result < minLovelace then minLovelace else result
-    else 0 -- Prevent Divide By Zero
-  where
-    result = (am * 10) `PlutusTx.Prelude.divide` p
+  print start
+  putStrLn ("Result is " ++ if (from start `contains` currentSlot) then "True" else "False")
+ 
+--  Plutus.V1.Ledger.Time.POSIXTimeRange
+ -- POSIXTimeRange
