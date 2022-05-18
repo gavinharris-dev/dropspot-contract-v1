@@ -53,6 +53,7 @@ import PlutusTx.Prelude hiding (Semigroup (..), unless)
 import qualified PlutusTx.Foldable as Foldable
 import Text.Printf (printf)
 import qualified Prelude as Haskell
+import qualified PlutusTx.Prelude as Plutus
 
 data ContractInfo = ContractInfo
   { marketPlaceOwner :: !PubKeyHash, -- Wallet address for Dropspot
@@ -71,6 +72,10 @@ data DisbursementItem = DisbursementItem {
   percent   :: !Integer -- Percentage to be paid to the market place owner
 }
   deriving (Generic, ToJSON, FromJSON, Haskell.Show, Haskell.Eq, ToSchema)
+
+instance Eq DisbursementItem where
+  {-# INLINABLE (==) #-}
+  x == y = (wallet x == wallet y) && (percent x == percent y)
 
 data MarketDatum = MarketDatum
   { royalties :: ![DisbursementItem],
@@ -115,7 +120,7 @@ lovelacePercentage am p =
     then if result < minLovelace then minLovelace else result
     else 0 -- Prevent Divide By Zero
   where
-    result = (am * 10) `PlutusTx.Prelude.divide` p
+    result = (am * 10) `Plutus.divide` p
 
 {-# INLINEABLE mkValidator #-}
 mkValidator :: ContractInfo -> MarketDatum -> MarketAction -> ScriptContext -> Bool
@@ -124,21 +129,15 @@ mkValidator ci mkDatum mkAction context = case mkAction of
   --   1. The Trade Owner is being paid at least the 'minimum' amount
   --   2. The Token is being xferd to the buyer
   Buy ->
-    traceIfFalse "Sale is not open yet" (purchaseStartDatePassed $ startDate mkDatum)
-      && correctlySplit (royalties mkDatum) (marketPlaceOwner ci) (marketPlacePCT ci) (disburements mkDatum) (unPaymentPubKeyHash $ tradeOwner mkDatum) (amount mkDatum)
-      && buyerGetsPaid (valuePaidTo txInfo signer) (policy mkDatum) (token mkDatum)
-  -- Cancel action need to verify that:
-  --   1. The Trade Owner should geti their NFT Back
-  --   2. If / When we go to a Bid process the current Highest Big should be repaid.
-  --   3. Transaction Signed by Marketplace Owner or Royalty Owner
-  --   4. If signed by Royalty Owner then DS needs to be paid a nominal fee (5 ADA?)? - Future Listings?
-
+    traceIfFalse "Sale is not open yet" (purchaseStartDatePassed $ startDate mkDatum) &&
+      correctlySplit (royalties mkDatum) (marketPlaceOwner ci) (marketPlacePCT ci) (disburements mkDatum) (unPaymentPubKeyHash $ tradeOwner mkDatum) (amount mkDatum) &&
+      buyerGetsPaid (valuePaidTo txInfo signer) (policy mkDatum) (token mkDatum)
+      
   Relist -> 
-    False
-    -- Must be signed by Trade Owner
-    -- NFT must be sent to script (include all datum etc)
+    traceIfFalse "To relist a sale you must be the tradeOwner" $ txSignedBy txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)
+      && traceIfFalse "The Token must be paid back to the Script" tokenPaidBackToScript 
+      && traceIfFalse "The output datum changes are not allowed" outputDatumChangesAreAllowed 
 
-  --  NFT(Datum 1) -> NFT(Datum 2)
   Cancel ->
     traceIfFalse "The trade owner should get their NFT" $ containsNFT (valuePaidTo txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)) (policy mkDatum) (token mkDatum) &&
     traceIfFalse "The Marketplace Owner should get their Cancelation Fee" dropspotGetPaid
@@ -152,8 +151,31 @@ mkValidator ci mkDatum mkAction context = case mkAction of
     signer = case txInfoSignatories txInfo of
       [pkh] -> pkh
 
-    -- tradeOwnerGetsPaid :: PubKeyHash -> Integer -> Bool
-    -- tradeOwnerGetsPaid ownerAddress minAmount = traceIfFalse "Trade Owner does not get at least requested Price" $ Ada.fromValue (valuePaidTo txInfo ownerAddress) >= Ada.lovelaceOf minAmount
+    tokenValue :: Value
+    tokenValue = Value.singleton (policy mkDatum) (token mkDatum) 1
+
+    ownOutput   :: TxOut
+    outputDatum :: MarketDatum
+    (ownOutput, outputDatum) = case getContinuingOutputs context of
+        [o] -> case txOutDatumHash o of
+            Nothing   -> traceError "wrong output type"
+            Just h -> case findDatum h txInfo of
+                Nothing        -> traceError "datum not found"
+                Just (Datum d) ->  case PlutusTx.fromBuiltinData d of
+                    Just ad' -> (o, ad')
+                    Nothing  -> traceError "error decoding data"
+        _   -> traceError "expected exactly one continuing output"
+
+    tokenPaidBackToScript :: Bool
+    tokenPaidBackToScript = txOutValue ownOutput == tokenValue Plutus.<> Ada.lovelaceValueOf minLovelace
+
+    outputDatumChangesAreAllowed :: Bool
+    outputDatumChangesAreAllowed = 
+      (royalties outputDatum) == (royalties mkDatum)
+        && (disburements outputDatum) == (disburements mkDatum)
+        && (tradeOwner outputDatum) == (tradeOwner mkDatum)
+        && (policy outputDatum) == (policy mkDatum)
+        && (token outputDatum) == (token mkDatum)
 
     buyerGetsPaid :: Value -> CurrencySymbol -> TokenName -> Bool
     buyerGetsPaid v policy asset = traceIfFalse "The Buyer is not going to get their NFT" $ containsNFT v policy asset
@@ -283,6 +305,16 @@ data BuyParams = BuyParams
   deriving stock (Haskell.Eq, Haskell.Show, Generic)
   deriving anyclass (FromJSON, ToJSON, ToSchema)
 
+data RelistParams = RelistParams {
+  relistAmount :: Integer,
+  relistStartDate :: POSIXTime,
+  relistPolicy :: !CurrencySymbol,
+  relistAssetName :: !TokenName
+}
+  deriving stock (Haskell.Eq, Haskell.Show, Generic)
+  deriving anyclass (FromJSON, ToJSON, ToSchema)
+
+
 list :: AsContractError e => ListParams -> Contract w s e ()
 list ListParams {..} = do
   pkh <- ownPaymentPubKeyHash
@@ -302,6 +334,21 @@ list ListParams {..} = do
   ledgerTx <- submitTxConstraints typedValidator tx
   void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
   logInfo @Haskell.String $ printf "Listed %s for token %s. Transaction %s" (Haskell.show d) (Haskell.show v) (Haskell.show ledgerTx)
+
+-- relist :: forall w s. RelistParams -> Contract w s Text ()
+-- relist RelistParams {..} = do
+--   (oref, o, d@MarketDatum {..}) <- findOffer relistPolicy relistAssetName
+  
+--   pkh <- ownPaymentPubKeyHash
+--   let r  = Redeemer $ PlutusTx.toBuiltinData Relist
+--       lookups =
+--         Constraints.typedValidatorLookups typedValidator
+--           Haskell.<> Constraints.ownPaymentPubKeyHash pkh
+--           Haskell.<> Constraints.otherScript validator
+--           Haskell.<> Constraints.unspentOutputs (Map.singleton oref o)
+
+--       tx = Constraints.mustSpendScriptOutput oref r
+
 
 buy :: forall w s. BuyParams -> Contract w s Text ()
 buy BuyParams {..} = do

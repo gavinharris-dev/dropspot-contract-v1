@@ -126,6 +126,22 @@ listTraceNoRoyaltiesOrDisbursements = do
   }
   void $ waitNSlots 1
 
+
+listTraceReList :: EmulatorTrace ()
+listTraceReList = do
+  h1 <- activateContractWallet ownerWallet endpoints
+  callEndpoint @"list" h1 $ ListParams {
+    listPolicy = testCurr,
+    listAssetName = testToken,
+    listAmount = 400_000_000,
+    listTradeOwner = mockWalletPaymentPubKeyHash ownerWallet,
+    listStartDate = slotToBeginPOSIXTime def 20,
+    listDisbursements = [],
+    listRoyalties = []
+  }
+  void $ waitNSlots 2
+
+
 test :: IO ()
 test = runEmulatorTraceIO' def emCfg listTraceNoRoyaltiesOrDisbursements
   where
