@@ -9,7 +9,6 @@
 
 module Plutus.Contracts.DropspotmarketTest where
 
-
 import Control.Monad.Freer.Extras as Extras
 import Data.Default               (Default (..))
 import Data.Functor               (void)
@@ -20,7 +19,7 @@ import Plutus.V1.Ledger.Value
 import PlutusTx.Builtins
 import Ledger.Ada as Ada;
 import Ledger.Value as Value
-import Ledger.Address (unPaymentPubKeyHash)
+import Ledger.Address
 
 import Data.Map as Map
 import Plutus.Contracts.DropspotMarket
@@ -52,6 +51,7 @@ testCurr = CurrencySymbol "f"
 
 testToken :: TokenName 
 testToken = TokenName "T"
+
 
 
 listTrace :: EmulatorTrace ()
@@ -154,9 +154,37 @@ test = runEmulatorTraceIO' def emCfg listTraceNoRoyaltiesOrDisbursements
     }
   
     nftValue :: Value
-    nftValue = v <> Value.singleton testCurr testToken 1
+    nftValue = v <> Value.singleton testCurr testToken 1 
+                 <> Value.singleton (CurrencySymbol "1413b3f27eaa75905f3c88b82fd4984904023f3606d8b576232a87f9") (TokenName "tDMT.1") 1
+                 <> Value.singleton (CurrencySymbol "1413b3f27eaa75905f3c88b82fd4984904023f3606d8b576232a87f9") (TokenName "tDMT.2") 1
+                 <> Value.singleton (CurrencySymbol "1413b3f27eaa75905f3c88b82fd4984904023f3606d8b576232a87f9") (TokenName "tDMT.3") 1
 
     v :: Value
     v = Ada.lovelaceValueOf 1_000_000_000
 
 
+-- [
+--     102_0([
+--         0,
+--         [
+--             [],
+--             [],
+--             h'd006eb7783e8c93160b2bab287bc8a6f069e9e690cd82bc0b52a8c31',
+--             70000002_2,
+--             h'777be88df242bd81b95d8947d099086abf1896a4d693be4a80388ee9',
+--             h'74444d54',
+--             1652935982942_3,
+--         ],
+--     ]),
+-- ],
+
+testDatum :: MarketDatum
+testDatum = MarketDatum {
+  royalties = [],
+  disburements = [],
+  tradeOwner = PaymentPubKeyHash "d006eb7783e8c93160b2bab287bc8a6f069e9e690cd82bc0b52a8c31",
+  amount = 70000002,
+  policy = CurrencySymbol "777be88df242bd81b95d8947d099086abf1896a4d693be4a80388ee9",
+  token = TokenName "74444d54",
+  startDate = 1652935982942
+}

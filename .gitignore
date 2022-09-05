@@ -1,3 +1,4 @@
+id_rsa
 dist
 dist-*
 cabal-dev
@@ -28,3 +29,4 @@ build.log
 *.plutus
 ghcup
 .DS_Store
+builds/

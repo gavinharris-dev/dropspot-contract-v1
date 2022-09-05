@@ -44,6 +44,7 @@ library
       Plutus.Contracts.AllwaysTrue
       Plutus.Contracts.DropspotMarket
       Plutus.Contracts.DropspotDMTDistro
+      Plutus.Contracts.DropspotClaim
     build-depends:
       base ^>=4.14.1.0,
       aeson,
@@ -63,7 +64,9 @@ library
       serialise,
       cardano-binary,
       base16-bytestring,
-      cardano-api
+      cardano-api,
+      cardano-crypto-class,
+      cardano-ledger-alonzo, bech32, cardano-addresses
     hs-source-dirs: src examples/src
 
 test-suite plutus-example-projects-test
@@ -78,11 +81,13 @@ test-suite plutus-example-projects-test
     plutus-tx-plugin,
     plutus-contract -any,
     plutus-ledger -any,
-    plutus-starter -any
+    plutus-starter -any, bech32, cardano-addresses
   build-depends:
     base >=4.9 && <5,
     tasty -any,
     tasty-hunit -any,
+    cardano-crypto-class,
+    bech32, cardano-addresses,
     tasty-hedgehog >=0.2.0.0
 
 -- executable plutus-starter-pab
@@ -104,6 +109,27 @@ test-suite plutus-example-projects-test
 --     plutus-ledger -any,
 --     openapi3 -any,
 
+executable DropspotClaimCompile
+  import:               lang
+  hs-source-dirs:       app
+  main-is:              DropspotClaimCompile.hs
+  ghc-options:          -threaded -rtsopts "-with-rtsopts=-T"
+
+  build-depends:        cardano-api
+                      , cardano-ledger-alonzo
+                      , plutus-ledger
+                      , plutus-starter -any
+                      , plutus-ledger-api
+                      , cardano-ledger-alonzo
+                      , plutus-tx
+                      , bytestring
+                      , aeson
+                      , cardano-binary
+                      , bech32
+                      , cardano-addresses
+                      , cardano-crypto-class
+                      , base >= 4.9 && < 5
+
 executable DropspotMarketCompile
   import:               lang
   hs-source-dirs:       app
@@ -115,10 +141,14 @@ executable DropspotMarketCompile
                       , plutus-ledger
                       , plutus-starter -any
                       , plutus-ledger-api
-                      , bytestring
-                      , base16-bytestring
-                      , plutus-tx
                       , cardano-ledger-alonzo
+                      , plutus-tx
+                      , bytestring
+                      , aeson
+                      , cardano-binary
+                      , bech32
+                      , cardano-addresses
+                      , cardano-crypto-class
                       , base >= 4.9 && < 5
 
 executable DMTDistroCompile
@@ -137,7 +167,8 @@ executable DMTDistroCompile
                       , bytestring
                       , aeson
                       , cardano-binary
-                      , bech32
+                      , bech32, cardano-addresses
+                      , cardano-crypto-class
                       , base >= 4.9 && < 5
 
 executable AlwaysTrueCompile
@@ -152,6 +183,9 @@ executable AlwaysTrueCompile
                       , plutus-starter -any
                       , plutus-ledger-api
                       , bytestring
+                      , cardano-binary
+                      , cardano-crypto-class
+                      , bech32, cardano-addresses
                       , base >= 4.9 && < 5
 
 -- executable DropSpotTradeCompile

@@ -1,19 +1,29 @@
 module Play (main) where
 
-import Data.Default (def)
-import GHC.Base (when)
-import Ledger.Interval
-import Ledger.TimeSlot
-import Plutus.Contract (logInfo)
-import qualified PlutusTx.Prelude
+import           Text.Printf (printf)
+import           Plutus.V1.Ledger.Api
+import PlutusTx.Builtins.Class
+import Cardano.Api (scriptDataToJson, toCBOR)
+import Cardano.Api.Byron (ScriptDataJsonSchema(ScriptDataJsonDetailedSchema))
+import Cardano.Api.Shelley (fromPlutusData)
+import  Data.Aeson (encode)
+import Ledger (PaymentPubKeyHash(PaymentPubKeyHash))
+import qualified Plutus.V1.Ledger.Api as Plutus
 
-main :: IO ()
-main = do
-  let currentSlot = slotToPOSIXTimeRange def 10
-      start = slotToBeginPOSIXTime def 4
+datumToCBOR :: ()
+datumToCBOR = do
+  let datum = stringToBuiltinByteString "Test"
 
-  print start
-  putStrLn ("Result is " ++ if (from start `contains` currentSlot) then "True" else "False")
+  print $ "Datum value: " <> encode (toCBOR (fromPlutusData (Plutus.toData datum)))
+
+
+-- main :: IO ()
+-- main = do
+--   let currentSlot = slotToPOSIXTimeRange def 10
+--       start = slotToBeginPOSIXTime def 4
+
+--   print start
+--   putStrLn ("Result is " ++ if (from start `contains` currentSlot) then "True" else "False")
  
---  Plutus.V1.Ledger.Time.POSIXTimeRange
- -- POSIXTimeRange
+-- --  Plutus.V1.Ledger.Time.POSIXTimeRange
+--  -- POSIXTimeRange
