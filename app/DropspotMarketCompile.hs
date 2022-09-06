@@ -103,7 +103,6 @@ main = do
 
   putStrLn $ "Writing output to: " ++ scriptname
 
-  let localCI = contractInfo
 
   -- printf ">>>> TXN: %s\n" (show $ marketPlaceOwner contractInfo)
   -- printf ">>>> TXN: %s\n" (show $ marketPlaceOwner localCI)
