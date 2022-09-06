@@ -88,28 +88,44 @@ main :: IO ()
 main = do
   args <- getArgs
   let nargs = length args
-      argMarketPlaceOwner = stringToBuiltinByteString (if nargs > 0 then read (args!!0) else "")
+      argEnvironment = if nargs > 0 then read args!!0 else return () 
       argMarketPlacePCT   = if nargs > 1 then read (args!!1)  else 400
       scriptname      = if nargs > 2 then args!!2 else  "result.plutus"
 
-  putStrLn $ printf " { dsWalletAddress: %s, Percent: %s } " (show argMarketPlaceOwner) (show argMarketPlacePCT)
+  putStrLn $ printf " { dsWalletAddress: %s, Percent: %s } " (show argEnvironment) (show argMarketPlacePCT)
+
+  let localCI = case argEnvironment of
+                  "Preprod" -> localCI = ContractInfo
+                                    { marketPlaceOwner = PaymentPubKeyHash "24d7811ebd7aff17e6be4b2f7a3677886f9617973e119855da033bb9", -- TEST Wallet
+                                      marketPlacePCT = 400 -- 2.5%
+                                    }
+                  "Main"    -> localCI = ContractInfo
+                                    { marketPlaceOwner = PaymentPubKeyHash "8714132c8367303702bfeacbbe06be8f4b9442e00f1ddd0529347947", -- TEST Wallet
+                                      marketPlacePCT = 400 -- 2.5%
+                                    }
 
   putStrLn $ "Writing output to: " ++ scriptname
 
-  -- let contractInfo = ContractInfo {
-  --   marketPlaceOwner = PaymentPubKeyHash $ PubKeyHash argMarketPlaceOwner,
-  --   marketPlacePCT = argMarketPlacePCT
-  -- }
+  let localCI = contractInfo
+
+  -- printf ">>>> TXN: %s\n" (show $ marketPlaceOwner contractInfo)
+  -- printf ">>>> TXN: %s\n" (show $ marketPlaceOwner localCI)
+
+  -- putStrLn marketPlaceOwner localCI
+  -- putStrLn marketPlaceOwner contractInfo
+
+  -- putStrLn marketPlacePCT localCI
+  -- putStrLn marketPlacePCT contractInfo
 
   -- let humanPart = Bech32.humanReadablePartFromText $ T.pack "test_addr";
   --     dataPart = Bech32.dataPartFromBytes $ valHash contractInfo 
 
-  writePlutusScript scriptname (dropspotMarketlised contractInfo) (dropspotMarketSBS contractInfo)
+  writePlutusScript scriptname (dropspotMarketlised localCI) (dropspotMarketSBS localCI)
   
-  putStrLn $ "Script Address: " ++ show (scrAddress contractInfo)
+  --putStrLn $ "Script Address: " ++ show (scrAddress localCI)
 
-  print $ "Datum value: " <> encode (scriptDataToJson ScriptDataJsonDetailedSchema $ fromPlutusData (Plutus.toData datum))
-  print $ "Redeemer value: " <> encode (scriptDataToJson ScriptDataJsonDetailedSchema $ fromPlutusData (Plutus.toData redeemer))
+  -- print $ "Datum value: " <> encode (scriptDataToJson ScriptDataJsonDetailedSchema $ fromPlutusData (Plutus.toData datum))
+  -- print $ "Redeemer value: " <> encode (scriptDataToJson ScriptDataJsonDetailedSchema $ fromPlutusData (Plutus.toData redeemer))
 
 
 writePlutusScript :: FilePath -> PlutusScript PlutusScriptV1 -> SBS.ShortByteString -> IO ()

@@ -120,7 +120,8 @@ data MarketDatum = MarketDatum
   }
   deriving (Generic, ToJSON, FromJSON, Haskell.Show)
 
-data MarketAction = Buy | Relist | Cancel | CCBuy
+-- data MarketAction = Buy | Relist | Cancel | CCBuy
+data MarketAction = Buy | Relist | Cancel
 
 PlutusTx.makeIsDataIndexed ''ContractInfo [('ContractInfo, 0)]
 PlutusTx.makeLift ''ContractInfo
@@ -131,7 +132,9 @@ PlutusTx.makeLift ''DisbursementItem
 PlutusTx.makeIsDataIndexed ''MarketDatum [('MarketDatum, 0)]
 PlutusTx.makeLift ''MarketDatum
 
-PlutusTx.makeIsDataIndexed ''MarketAction [('Buy, 0), ('Relist, 1), ('Cancel, 2), ('CCBuy, 3)]
+-- PlutusTx.makeIsDataIndexed ''MarketAction [('Buy, 0), ('Relist, 1), ('Cancel, 2), ('CCBuy, 3)]
+
+PlutusTx.makeIsDataIndexed ''MarketAction [('Buy, 0), ('Relist, 1), ('Cancel, 2)]
 PlutusTx.makeLift ''MarketAction
 
 -- On Chain Validator
@@ -142,14 +145,13 @@ mkValidator ci mkDatum mkAction context = case mkAction of
   -- Buy action need to verify that:
   --   1. The Trade Owner is being paid at least the 'minimum' amount
   --   2. The Token is being xferd to the buyer
-  Buy -> 
-          standardBuyConditions   
+  Buy -> standardBuyConditions   
       -- The Signing Wallet is paid out the NFT
       &&  containsNFT (valuePaidTo txInfo signer) (policy mkDatum) (token mkDatum)
 
-  CCBuy -> 
-          standardBuyConditions 
-      &&  txSignedBy txInfo (unPaymentPubKeyHash $ marketPlaceOwner ci)
+  -- CCBuy -> 
+  --         standardBuyConditions 
+  --     &&  txSignedBy txInfo (unPaymentPubKeyHash $ marketPlaceOwner ci)
 
   Relist ->
           txSignedBy txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)
@@ -224,7 +226,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
     otherDisbursements t d = Foldable.sum $ PlutusTx.Prelude.map (lovelacePercentage t . percent) d
 
     currectlyDisbursed :: Integer -> [DisbursementItem] -> Bool
-    currectlyDisbursed amt ds =  Foldable.all (\d -> Ada.getLovelace (Ada.fromValue (valuePaidTo txInfo $ unPaymentPubKeyHash (wallet d))) >= lovelacePercentage amt (percent d) ) ds
+    currectlyDisbursed amt ds =  Foldable.all (\d -> Ada.getLovelace (Ada.fromValue (valuePaidTo txInfo $ unPaymentPubKeyHash (wallet d))) >= lovelacePercentage amt (percent d)) ds
 
     purchaseStartDatePassed :: POSIXTime -> Bool
     purchaseStartDatePassed startDate = Plutus.V1.Ledger.Interval.before startDate (txInfoValidRange txInfo)
