@@ -5,7 +5,7 @@ RATE=$2
 TAG_DATE=$(date '+%Y%m%d%H%M%S')
 
 # Git Tag
-git commit -am "Build ${TAG_DATE}.$1"
+git commit -am "Build ${TAG_DATE}.$1 - $3"
 git tag -a "${TAG_DATE}.$1" -m "Build ${TAG_DATE}"
 git push origin --tags
 

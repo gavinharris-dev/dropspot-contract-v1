@@ -84,12 +84,12 @@ data ContractInfo = ContractInfo
 --     }
 
 -- // PREPROD COMPILE
-contractInfo :: ContractInfo
-contractInfo =
-  ContractInfo
-    { marketPlaceOwner = PaymentPubKeyHash "24d7811ebd7aff17e6be4b2f7a3677886f9617973e119855da033bb9", -- TEST Wallet
-      marketPlacePCT = 400 -- 2.5%
-    }
+-- contractInfo :: ContractInfo
+-- contractInfo =
+--   ContractInfo
+--     { marketPlaceOwner = PaymentPubKeyHash "24d7811ebd7aff17e6be4b2f7a3677886f9617973e119855da033bb9", -- TEST Wallet
+--       marketPlacePCT = 400 -- 2.5%
+--     }
 
 
 data DisbursementItem = DisbursementItem {
@@ -147,7 +147,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
   --   2. The Token is being xferd to the buyer
   Buy -> standardBuyConditions   
       -- The Signing Wallet is paid out the NFT
-      &&  containsNFT (valuePaidTo txInfo signer) (policy mkDatum) (token mkDatum)
+      -- &&  containsNFT (valuePaidTo txInfo signer) (policy mkDatum) (token mkDatum)
 
   -- CCBuy -> 
   --         standardBuyConditions 
