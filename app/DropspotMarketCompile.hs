@@ -80,29 +80,26 @@ datum = MarketDatum
 redeemer :: MarketAction
 redeemer = Relist
 
--- main :: IO ()
--- main = do 
---   printDatum
+envContractInfo env = case env of
+     "Preprod" -> ContractInfo
+                  { marketPlaceOwner = PaymentPubKeyHash "24d7811ebd7aff17e6be4b2f7a3677886f9617973e119855da033bb9", -- TEST Wallet
+                    marketPlacePCT = 400 -- 2.5%
+                  }
+     "Main"   -> ContractInfo
+                  { marketPlaceOwner = PaymentPubKeyHash "8714132c8367303702bfeacbbe06be8f4b9442e00f1ddd0529347947", -- TEST Wallet
+                    marketPlacePCT = 400 -- 2.5%
+                  }
+
 
 main :: IO ()
 main = do
   args <- getArgs
   let nargs = length args
-      argEnvironment = if nargs > 0 then read args!!0 else return () 
+      argEnvironment = if nargs > 0 then read (args!!0) else "Main" 
       argMarketPlacePCT   = if nargs > 1 then read (args!!1)  else 400
       scriptname      = if nargs > 2 then args!!2 else  "result.plutus"
 
-  putStrLn $ printf " { dsWalletAddress: %s, Percent: %s } " (show argEnvironment) (show argMarketPlacePCT)
-
-  let localCI = case argEnvironment of
-                  "Preprod" -> localCI = ContractInfo
-                                    { marketPlaceOwner = PaymentPubKeyHash "24d7811ebd7aff17e6be4b2f7a3677886f9617973e119855da033bb9", -- TEST Wallet
-                                      marketPlacePCT = 400 -- 2.5%
-                                    }
-                  "Main"    -> localCI = ContractInfo
-                                    { marketPlaceOwner = PaymentPubKeyHash "8714132c8367303702bfeacbbe06be8f4b9442e00f1ddd0529347947", -- TEST Wallet
-                                      marketPlacePCT = 400 -- 2.5%
-                                    }
+  let localCI = envContractInfo argEnvironment
 
   putStrLn $ "Writing output to: " ++ scriptname
 
