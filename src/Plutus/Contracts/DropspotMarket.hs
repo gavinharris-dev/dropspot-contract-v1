@@ -148,7 +148,8 @@ mkValidator ci mkDatum mkAction context = case mkAction of
   --   2. The Token is being xferd to the buyer
   Buy -> standardBuyConditions   
       -- The Signing Wallet is paid out the NFT
-      &&  Foldable.any (\s -> containsNFT (valuePaidTo txInfo s) (policy mkDatum) (token mkDatum)) (txInfoSignatories txInfo)
+      -- && Foldable.any (\s -> containsNFT (valuePaidTo txInfo s) (policy mkDatum) (token mkDatum)) (txInfoSignatories txInfo)
+      && Foldable.length (txInfoSignatories txInfo) == 1
 
   -- CCBuy -> 
   --         standardBuyConditions 
