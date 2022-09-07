@@ -231,7 +231,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
         && token outputDatum == token mkDatum
 
     containsNFT :: Value -> CurrencySymbol -> TokenName -> Bool
-    containsNFT v policy asset = dsValueOf v policy asset == 0
+    containsNFT v policy asset = dsValueOf v policy asset != 0
 
     otherDisbursements :: Integer -> [DisbursementItem] -> Integer
     otherDisbursements t d = Foldable.sum $ PlutusTx.Prelude.map (lovelacePercentage t . percent) d
