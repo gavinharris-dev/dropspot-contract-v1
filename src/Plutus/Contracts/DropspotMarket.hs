@@ -140,18 +140,6 @@ PlutusTx.makeLift ''MarketAction
 
 -- On Chain Validator
 
-{-# INLINABLE dsValueOf #-}
--- | Get the quantity of the given currency in the 'Value'.
-dsValueOf :: Value -> CurrencySymbol -> TokenName -> Integer
-dsValueOf v cur tn =
-  case PlutusMap.lookup cur $ Value.getValue v of
-    Just tokenMap -> case PlutusMap.lookup tn tokenMap of
-      Nothing -> 0
-      Just total -> total
-    Nothing -> 0
-
-
-
 {-# INLINEABLE mkValidator #-}
 mkValidator :: ContractInfo -> MarketDatum -> MarketAction -> ScriptContext -> Bool
 mkValidator ci mkDatum mkAction context = case mkAction of
@@ -160,7 +148,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
   --   2. The Token is being xferd to the buyer
   Buy -> standardBuyConditions   
       -- The Signing Wallet is paid out the NFT
-      &&  containsNFT (valuePaidTo txInfo signer) (policy mkDatum) (token mkDatum)
+      &&  Foldable.any (\s -> containsNFT (valuePaidTo txInfo s) (policy mkDatum) (token mkDatum)) (txInfoSignatories txInfo)
 
   -- CCBuy -> 
   --         standardBuyConditions 
@@ -204,11 +192,6 @@ mkValidator ci mkDatum mkAction context = case mkAction of
     txInfo :: TxInfo
     txInfo = scriptContextTxInfo context
 
-    -- We are assuming that the Wallet Signing the Transaction will be the recipient of the NFT
-    signer :: PubKeyHash
-    signer = case txInfoSignatories txInfo of
-      [pkh] -> pkh
-
     ownOutput   :: TxOut
     outputDatum :: MarketDatum
     (ownOutput, outputDatum) = case getContinuingOutputs context of
@@ -222,7 +205,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
         _   -> traceError "E4"
 
     tokenPaidBackToScript :: Bool
-    tokenPaidBackToScript = dsValueOf (txOutValue ownOutput) (policy mkDatum) (token mkDatum) >= 1
+    tokenPaidBackToScript = Value.valueOf (txOutValue ownOutput) (policy mkDatum) (token mkDatum) >= 1
       && Ada.getLovelace (Ada.fromValue (txOutValue ownOutput)) >= MIN_UTXO_AMOUNT
 
     outputDatumChangesAreAllowed :: Bool
@@ -233,7 +216,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
         && token outputDatum == token mkDatum
 
     containsNFT :: Value -> CurrencySymbol -> TokenName -> Bool
-    containsNFT v policy asset = dsValueOf v policy asset >= 1
+    containsNFT v policy asset = Value.valueOf v policy asset >= 1
 
     otherDisbursements :: Integer -> [DisbursementItem] -> Integer
     otherDisbursements t d = Foldable.sum $ PlutusTx.Prelude.map (lovelacePercentage t . percent) d
