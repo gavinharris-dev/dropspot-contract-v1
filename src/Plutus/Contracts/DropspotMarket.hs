@@ -55,6 +55,7 @@ import Plutus.V1.Ledger.Interval (from, before)
 import qualified PlutusTx
 import PlutusTx.Prelude hiding (Semigroup (..), unless)
 import qualified PlutusTx.Foldable as Foldable
+import qualified PlutusTx.AssocMap as PlutusMap
 import Text.Printf (printf)
 import qualified Prelude as Haskell
 import qualified PlutusTx.Prelude as Plutus
@@ -139,6 +140,16 @@ PlutusTx.makeLift ''MarketAction
 
 -- On Chain Validator
 
+{-# INLINABLE dsValueOf #-}
+-- | Get the quantity of the given currency in the 'Value'.
+dsValueOf :: Value -> CurrencySymbol -> TokenName -> Integer
+dsValueOf (Value mp) cur tn =
+    case PlutusMap.lookup cur mp of
+        Nothing -> 0 :: Integer
+        Just i  -> case PlutusMap.lookup tn i of
+            Nothing -> 0 :: Integer
+            Just v  -> v
+
 {-# INLINEABLE mkValidator #-}
 mkValidator :: ContractInfo -> MarketDatum -> MarketAction -> ScriptContext -> Bool
 mkValidator ci mkDatum mkAction context = case mkAction of
@@ -209,7 +220,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
         _   -> traceError "E4"
 
     tokenPaidBackToScript :: Bool
-    tokenPaidBackToScript = Value.valueOf (txOutValue ownOutput) (policy mkDatum) (token mkDatum) == 1
+    tokenPaidBackToScript = dsValueOf (txOutValue ownOutput) (policy mkDatum) (token mkDatum) == 1
       && Ada.getLovelace (Ada.fromValue (txOutValue ownOutput)) >= MIN_UTXO_AMOUNT
 
     outputDatumChangesAreAllowed :: Bool
@@ -220,7 +231,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
         && token outputDatum == token mkDatum
 
     containsNFT :: Value -> CurrencySymbol -> TokenName -> Bool
-    containsNFT v policy asset = Value.valueOf v policy asset == 0
+    containsNFT v policy asset = dsValueOf v policy asset == 0
 
     otherDisbursements :: Integer -> [DisbursementItem] -> Integer
     otherDisbursements t d = Foldable.sum $ PlutusTx.Prelude.map (lovelacePercentage t . percent) d
