@@ -43,6 +43,7 @@ import Ledger.Address
 import qualified Ledger.Constraints.TxConstraints as Constraints
 import qualified Ledger.Typed.Scripts as Scripts
 import Plutus.V1.Ledger.Value as Value
+import Plutus.V1.Ledger.Contexts as Contexts
 import Playground.Contract
 import Playground.TH (mkKnownCurrencies, mkSchemaDefinitions)
 import Playground.Types (KnownCurrency (..))
@@ -141,7 +142,7 @@ PlutusTx.makeLift ''MarketAction
 -- On Chain Validator
 
 {-# INLINEABLE mkValidator #-}
-mkValidator :: ContractInfo -> MarketDatum -> MarketAction -> ScriptContext -> Bool
+mkValidator :: ContractInfo -> MarketDatum -> MarketAction -> Contexts.ScriptContext -> Bool
 mkValidator ci mkDatum mkAction context = case mkAction of
   -- Buy action need to verify that:
   --   1. The Trade Owner is being paid at least the 'minimum' amount
@@ -149,7 +150,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
   Buy -> standardBuyConditions   
       -- The Signing Wallet is paid out the NFT
       -- && Foldable.any (\s -> containsNFT (valuePaidTo txInfo s) (policy mkDatum) (token mkDatum)) (txInfoSignatories txInfo)
-      && Foldable.length (txInfoSignatories txInfo) == 1
+      && Foldable.length (txInfoSignatories txInfo) >= 1
 
   -- CCBuy -> 
   --         standardBuyConditions 
