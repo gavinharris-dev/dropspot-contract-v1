@@ -42,7 +42,7 @@ import Ledger.Ada as Ada
 import Ledger.Address
 import qualified Ledger.Constraints.TxConstraints as Constraints
 import qualified Ledger.Typed.Scripts as Scripts
-import Ledger.Value as Value
+import Plutus.V1.Ledger.Value as Value
 import Playground.Contract
 import Playground.TH (mkKnownCurrencies, mkSchemaDefinitions)
 import Playground.Types (KnownCurrency (..))
@@ -209,7 +209,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
         _   -> traceError "E4"
 
     tokenPaidBackToScript :: Bool
-    tokenPaidBackToScript = valueOf (txOutValue ownOutput) (policy mkDatum) (token mkDatum) == 1
+    tokenPaidBackToScript = Value.valueOf (txOutValue ownOutput) (policy mkDatum) (token mkDatum) == 1
       && Ada.getLovelace (Ada.fromValue (txOutValue ownOutput)) >= MIN_UTXO_AMOUNT
 
     outputDatumChangesAreAllowed :: Bool
@@ -220,7 +220,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
         && token outputDatum == token mkDatum
 
     containsNFT :: Value -> CurrencySymbol -> TokenName -> Bool
-    containsNFT v policy asset = valueOf v policy asset >= 1
+    containsNFT v policy asset = Value.valueOf v policy asset >= 1
 
     otherDisbursements :: Integer -> [DisbursementItem] -> Integer
     otherDisbursements t d = Foldable.sum $ PlutusTx.Prelude.map (lovelacePercentage t . percent) d
