@@ -163,7 +163,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
 
   Cancel -> -- Trade Owner gets the Token and DS gets its Minting Fee, as long as the Transaction is signed 
           (txSignedBy txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum) || txSignedBy txInfo (unPaymentPubKeyHash $ marketPlaceOwner ci))
-      &&  containsNFT (valuePaidTo txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)) (policy mkDatum) (token mkDatum)
+      -- &&  Value.valueOf (valuePaidTo txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)) (policy mkDatum) (token mkDatum)
       &&  (Ada.getLovelace (Ada.fromValue (valuePaidTo txInfo (unPaymentPubKeyHash $ marketPlaceOwner ci))) >= DROPSPOT_MINTING_FEE) 
 
   where
