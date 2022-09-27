@@ -162,7 +162,7 @@ mkValidator ci mkDatum mkAction context = case mkAction of
       &&  outputDatumChangesAreAllowed
 
   Cancel -> -- Trade Owner gets the Token and DS gets its Minting Fee, as long as the Transaction is signed 
-          txSignedBy txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)   -- (txSignedBy txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum) || txSignedBy txInfo (unPaymentPubKeyHash $ marketPlaceOwner ci))
+          (txSignedBy txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum) || txSignedBy txInfo (unPaymentPubKeyHash $ marketPlaceOwner ci))
       &&  Value.valueOf (valuePaidTo txInfo (unPaymentPubKeyHash $ tradeOwner mkDatum)) (policy mkDatum) (token mkDatum) >= 1 -- Should we be (in Datum) holding a ref to the number of Tokens that are being 'sold'?
       &&  (Ada.getLovelace (Ada.fromValue (valuePaidTo txInfo (unPaymentPubKeyHash $ marketPlaceOwner ci))) >= DROPSPOT_MINTING_FEE) 
 
