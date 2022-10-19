@@ -66,7 +66,7 @@ library
       base16-bytestring,
       cardano-api,
       cardano-crypto-class,
-      cardano-ledger-alonzo, bech32, cardano-addresses
+      cardano-ledger-alonzo, bech32, cardano-addresses, shrinker, shrinker-tx
     hs-source-dirs: src examples/src
 
 test-suite plutus-example-projects-test
